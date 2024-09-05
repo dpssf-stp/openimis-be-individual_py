@@ -1,6 +1,8 @@
+from datetime import date, timedelta
 import json
 import graphene
 import graphene_django_optimizer as gql_optimizer
+from individual import constants
 import pandas as pd
 
 from django.contrib.auth.models import AnonymousUser
@@ -61,6 +63,15 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String(),
         groupId=graphene.String(),
+        fullname=graphene.String(),
+        nickname=graphene.String(),
+        sex=graphene.String(),
+        dob__year=graphene.Int(),
+        id_number=graphene.String(),
+        hasIdPhoto=graphene.Boolean(),
+        isChild=graphene.Boolean(),
+        isIdProblem=graphene.Boolean(),
+        pfvStatus=graphene.String(),
         customFilters=graphene.List(of_type=graphene.String),
         benefitPlanToEnroll=graphene.String(),
         benefitPlanId=graphene.String(),
@@ -105,6 +116,15 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         client_mutation_id=graphene.String(),
         first_name=graphene.String(),
         last_name=graphene.String(),
+        fullname=graphene.String(),
+        nickname=graphene.String(),
+        sex=graphene.String(),
+        district=graphene.String(),
+        sub_district=graphene.String(),
+        individual_id=graphene.UUID(),
+        pfvStatus=graphene.String(),
+        isIdProblem=graphene.Boolean(),
+        hasChild=graphene.Boolean(),
         customFilters=graphene.List(of_type=graphene.String),
         benefitPlanToEnroll=graphene.String()
     )
@@ -187,8 +207,71 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
 
         Query._check_permissions(info.context.user,
                                  IndividualConfig.gql_individual_search_perms)
-        query = Individual.objects.filter(*filters)
+        
+        has_id_photo = kwargs.get("hasIdPhoto", None)
+        if has_id_photo is not None:
+            filters.append(Q(photos__isnull=not (has_id_photo)))
+
+        dob_year = kwargs.pop("dob__year", None)
+        if dob_year:
+            filters.append(Q(dob__year=dob_year))
+
+        is_child = kwargs.get("isChild", None)
+        if is_child:
+            today = date.today()
+            filters.append(Q(dob__gte=today - timedelta(days=365.25*18)))
+
+        query = Individual.objects.filter(*filters).distinct()
         custom_filters = kwargs.get("customFilters", None)
+
+        fullname = kwargs.get("fullname", None)
+        if fullname:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._full_name_field}__icontains__string="{fullname}"'
+            )
+
+        nickname = kwargs.get("nickname", None)
+        if nickname:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._nickname_field}__icontains__string="{nickname}"'
+            )
+        
+        id_number = kwargs.get("idNumber", None)
+        if id_number:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._id_number_field}__icontains__string="{id_number}"'
+            )
+        
+        sex = kwargs.get("sex", None)
+        if sex:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._sex_field}__icontains__string="{sex}"'
+            )
+        
+        pfv_status = kwargs.get("pfvStatus", None)
+        if pfv_status:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._group_default_program_status_field}__icontains__string="{pfv_status}"'
+            )
+
+        is_id_problem = kwargs.get("isIdProblem", None)
+        if is_id_problem:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._group_default_program_problem_field}__icontains__string="{is_id_problem}"'
+            )
+        
         if custom_filters:
             query = CustomFilterWizardStorage.build_custom_filters_queryset(
                 Query.module_name,
@@ -312,9 +395,90 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 ~Q(groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll)
             )
 
-        query = Group.objects.filter(*filters).distinct()
+        fullname = kwargs.get("fullname", None)
+        if fullname:
+            filters.append(
+                Q(groupindividual__role=GroupIndividual.Role.HEAD) &
+                Q(groupindividual__individual__json_ext__has_key=constants._full_name_field) &  # Check if the key exists
+                Q(**{
+                    f'groupindividual__individual__json_ext__{constants._full_name_field}__icontains': fullname
+                })
+            )
 
+        nickname = kwargs.get("nickname", None)
+        if nickname:
+            filters.append(
+                Q(groupindividual__role=GroupIndividual.Role.HEAD) &
+                Q(groupindividual__individual__json_ext__has_key=constants._nickname_field) &  # Check if the key exists
+                Q(**{
+                    f'groupindividual__individual__json_ext__{constants._nickname_field}__icontains': nickname
+                })
+            )
+
+        district = kwargs.get("district", None)
+        if district:
+            filters.append(
+                Q(groupindividual__role=GroupIndividual.Role.HEAD) &
+                Q(groupindividual__individual__json_ext__has_key=constants._district_field) &  # Check if the key exists
+                Q(**{
+                    f'groupindividual__individual__json_ext__{constants._district_field}__icontains': district
+                })
+            )
+
+        sub_district = kwargs.get("sub_district", None)
+        if sub_district:
+            filters.append(
+                Q(groupindividual__role=GroupIndividual.Role.HEAD) &
+                Q(groupindividual__individual__json_ext__has_key=constants._sub_district_field) &  # Check if the key exists
+                Q(**{
+                    f'groupindividual__individual__json_ext__{constants._sub_district_field}__icontains': sub_district
+                })
+            )
+
+        individual_id = kwargs.get("individual_id", None)
+        if individual_id:
+            filters.append(Q(groupindividual__individual__id=individual_id))
+
+        sex = kwargs.get("sex", None)
+        if sex:
+            filters.append(
+                Q(groupindividual__role=GroupIndividual.Role.HEAD) &
+                Q(groupindividual__individual__json_ext__has_key=constants._sex_field) &  # Check if the key exists
+                Q(**{
+                    f'groupindividual__individual__json_ext__{constants._sex_field}__iexact': sex
+                })
+            )
+
+        has_child = kwargs.get("hasChild", None)
+        if has_child:
+            # Calculate the date 18 years ago
+            today = date.today()
+            eighteen_years_ago = today - timedelta(days=365.25 * 18)
+
+            # Add a filter to find groups with at least one child (<= 18 years old)
+            filters.append(
+                Q(groupindividual__individual__dob__gte=eighteen_years_ago)
+            )
+
+        query = Group.objects.filter(*filters).distinct()
         custom_filters = kwargs.get("customFilters", None)
+
+        pfv_status = kwargs.get("pfvStatus", None)
+        if pfv_status:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._group_default_program_status_field}__icontains__string="{pfv_status}"'
+            )
+
+        is_id_problem = kwargs.get("isIdProblem", None)
+        if is_id_problem:
+            if not custom_filters:
+                custom_filters = []
+            custom_filters.append(
+                f'{constants._group_default_program_problem_field}__icontains__string="{is_id_problem}"'
+            )
+
         if custom_filters:
             query = CustomFilterWizardStorage.build_custom_filters_queryset(
                 Query.module_name,

@@ -1,9 +1,11 @@
+import os
 from django.db import models
 
 import core
 from core.models import HistoryModel
 
 from django.utils.translation import gettext_lazy as _
+from individual.apps import IndividualConfig
 
 
 class Individual(HistoryModel):
@@ -18,6 +20,27 @@ class Individual(HistoryModel):
 
     class Meta:
         managed = True
+
+
+class IndividualPhoto(HistoryModel):
+    class Type(models.TextChoices):
+        ID_FRONT = 'id_front', _('ID Front Photo')
+        ID_BACK = 'id_back', _('ID Back Photo')
+        OTHERS = 'others', _('Others')
+
+    individual = models.ForeignKey("Individual", on_delete=models.DO_NOTHING, blank=True, null=True, related_name="photos")
+    folder = models.CharField(max_length=255, blank=True, null=True)
+    filename = models.CharField(max_length=250, blank=True, null=True)
+    # Support of BinaryField is database-related: prefer to stick to b64-encoded
+    photo = models.TextField(blank=True, null=True)
+    type = models.CharField(max_length=20, choices=Type.choices, default=Type.OTHERS)
+    date = core.fields.DateField()
+
+    def full_file_path(self):
+        if not IndividualConfig.individual_photos_root_path or not self.filename:
+            return None
+        return os.path.join(IndividualConfig.individual_photos_root_path, self.folder, self.filename)
+
 
 
 class IndividualDataSourceUpload(HistoryModel):

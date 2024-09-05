@@ -2,11 +2,15 @@ import graphene
 from django.contrib.auth.models import AnonymousUser
 from graphene_django import DjangoObjectType
 
+from django.core.exceptions import PermissionDenied
+from django.utils.translation import gettext_lazy as _
+
 from core import prefix_filterset, ExtendedConnection
 from core.gql_queries import UserGQLType
 from individual.apps import IndividualConfig
 from individual.models import Individual, IndividualDataSource, Group, GroupIndividual, \
-    IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+    IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource, IndividualPhoto
+from individual.utils import load_photo_file
 
 
 def _have_permissions(user, permission):
@@ -24,8 +28,51 @@ class JsonExtMixin:
         return None
 
 
+class IndividualPhotoGQLType(DjangoObjectType):
+    photo = graphene.String()
+    individual_id = graphene.UUID()
+
+    def resolve_individual_id(self, info):
+        return self.individual.id
+
+    def resolve_photo(self, info):
+        if not info.context.user.has_perms(IndividualConfig.gql_query_individual_photo_perms):
+            raise PermissionDenied(_("unauthorized"))
+        if self.photo:
+            return self.photo
+        elif IndividualConfig.insuree_photos_root_path and self.folder and self.filename:
+            return load_photo_file(self.folder, self.filename)
+        return None
+
+    class Meta:
+        model = IndividualPhoto
+        filter_fields = {
+            "id": ["exact"],
+            "type": ["exact"],
+
+            "is_deleted": ["exact"],
+            "version": ["exact"],
+
+        }
+
+
 class IndividualGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
+    id_front = graphene.Field(IndividualPhotoGQLType)
+    id_back = graphene.Field(IndividualPhotoGQLType)
+
+    @classmethod
+    def _check_photo_permission(cls, info):
+        if not info.context.user.has_perms(IndividualConfig.gql_query_individual_photo_perms):
+            raise PermissionDenied(_("unauthorized"))
+    
+    def resolve_id_front(self, info):
+        IndividualGQLType._check_photo_permission(info)
+        return self.photos.filter(type=IndividualPhoto.Type.ID_FRONT).last()
+
+    def resolve_id_back(self, info):
+        IndividualGQLType._check_photo_permission(info)
+        return self.photos.filter(type=IndividualPhoto.Type.ID_BACK).last()
 
     class Meta:
         model = Individual
@@ -40,6 +87,8 @@ class IndividualGQLType(DjangoObjectType):
             "date_updated": ["exact", "lt", "lte", "gt", "gte"],
             "is_deleted": ["exact"],
             "version": ["exact"],
+
+            **prefix_filterset("photos__", IndividualPhotoGQLType._meta.filter_fields),
         }
         connection_class = ExtendedConnection
 

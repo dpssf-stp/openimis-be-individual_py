@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.apps import AppConfig
 
@@ -40,7 +41,9 @@ DEFAULT_CONFIG = {
     "individual_mask_fields": [
         'json_ext.beneficiary_data_source',
         'json_ext.educated_level'
-    ]
+    ],
+    "gql_query_individual_photo_perms": ["159005"],
+    "individual_photos_root_path": os.path.abspath("./images/individual"),
 }
 
 
@@ -83,6 +86,9 @@ class IndividualConfig(AppConfig):
     enable_maker_checker_for_group_update = None
     individual_mask_fields = None
     individual_masking_enabled = None
+
+    gql_query_individual_photo_perms = None
+    individual_photos_root_path = None
 
     def ready(self):
         from core.models import ModuleConfiguration
