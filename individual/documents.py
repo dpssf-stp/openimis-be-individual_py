@@ -49,7 +49,7 @@ if 'opensearch_reports' in apps.app_configs and not is_unit_test_env:
             return items
 
 
-    @registry.register_document
+    # @registry.register_document
     class GroupIndividual(Document):
         group = opensearch_fields.ObjectField(properties={
             'id': opensearch_fields.KeywordField(),
