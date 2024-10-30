@@ -176,6 +176,9 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     global_schema = graphene.Field(GlobalSchemaType)
 
     def resolve_individual(self, info, **kwargs):
+        Query._check_permissions(info.context.user,
+                                 IndividualConfig.gql_individual_search_perms)
+
         filters = append_validity_filter(**kwargs)
 
         client_mutation_id = kwargs.get("client_mutation_id")
@@ -204,10 +207,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if filter_not_attached_to_group:
             subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
             filters.append(~Q(pk__in=Subquery(subquery)))
-
-        Query._check_permissions(info.context.user,
-                                 IndividualConfig.gql_individual_search_perms)
-        
+ 
         has_id_photo = kwargs.get("hasIdPhoto", None)
         if has_id_photo is not None:
             filters.append(Q(photos__isnull=not (has_id_photo)))
@@ -221,7 +221,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
             today = date.today()
             filters.append(Q(dob__gte=today - timedelta(days=365.25*18)))
 
-        query = Individual.objects.filter(*filters).distinct()
+        query = IndividualGQLType.get_queryset(None, info)
+        query = query.filter(*filters).distinct()
         custom_filters = kwargs.get("customFilters", None)
 
         fullname = kwargs.get("fullname", None)
@@ -460,7 +461,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 Q(groupindividual__individual__dob__gte=eighteen_years_ago)
             )
 
-        query = Group.objects.filter(*filters).distinct()
+        query = GroupGQLType.get_queryset(None, info)
+        query = query.filter(*filters).distinct()
         custom_filters = kwargs.get("customFilters", None)
 
         pfv_status = kwargs.get("pfvStatus", None)

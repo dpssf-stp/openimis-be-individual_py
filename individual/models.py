@@ -1,10 +1,12 @@
 import os
+from django.conf import settings
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 import core
 from core.models import HistoryModel
-
-from django.utils.translation import gettext_lazy as _
+from graphql import ResolveInfo
+from location.models import Location, LocationManager
 from individual.apps import IndividualConfig
 
 
@@ -15,11 +17,48 @@ class Individual(HistoryModel):
     #TODO WHY the HistoryModel json_ext was not enough
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
+    location = models.ForeignKey(
+        Location,
+        models.DO_NOTHING,
+        blank=True,
+        null=True,
+        related_name='individuals'
+    )
+
     def __str__(self):
         return f'{self.first_name} {self.last_name}'
 
     class Meta:
         managed = True
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        if queryset is None:
+            queryset = cls.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            user_districts_match_individual = LocationManager().build_user_location_filter_query(
+                user._u
+            )
+            individual_has_group = models.Q(("groupindividual__group__isnull", False))
+            user_districts_match_individual_group = LocationManager().build_user_location_filter_query(
+                user._u,
+                prefix='groupindividual__group__location'
+            )
+            return queryset.filter(
+                models.Q(
+                    user_districts_match_individual
+                    | (individual_has_group & user_districts_match_individual_group)
+                )
+            )
+
+        return queryset
 
 
 class IndividualPhoto(HistoryModel):
@@ -40,7 +79,6 @@ class IndividualPhoto(HistoryModel):
         if not IndividualConfig.individual_photos_root_path or not self.filename:
             return None
         return os.path.join(IndividualConfig.individual_photos_root_path, self.folder, self.filename)
-
 
 
 class IndividualDataSourceUpload(HistoryModel):
@@ -77,6 +115,32 @@ class IndividualDataUploadRecords(HistoryModel):
 class Group(HistoryModel):
     code = models.CharField(max_length=64, blank=False, null=False)
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
+    location = models.ForeignKey(
+        Location,
+        models.DO_NOTHING,
+        blank=True,
+        null=True,
+        related_name='groups'
+    )
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        if queryset is None:
+            queryset = Group.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            return queryset.filter(
+                LocationManager().build_user_location_filter_query(
+                    user._u
+                )
+            )
+        return queryset
 
 
 class GroupDataSource(HistoryModel):
@@ -108,7 +172,11 @@ class GroupIndividual(HistoryModel):
     json_ext = models.JSONField(db_column="Json_ext", blank=True, default=dict)
 
     def save(self, *args, **kwargs):
-        super().save(username=kwargs.get('username'))
+        user = kwargs.get('user')
+        if user:
+            super().save(user=user)
+        else:
+            super().save(username=kwargs.get('username'))  
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.handle_head_change(self.id, self.role, self.group_id)
@@ -117,7 +185,31 @@ class GroupIndividual(HistoryModel):
         service.update_json_ext_for_group(self.group)
 
     def delete(self, *args, **kwargs):
-        super().delete(username=kwargs.get('username'))
+        user = kwargs.get('user')
+        if user:
+            super().delete(user=user)
+        else:
+            super().delete(username=kwargs.get('username'))
+        
         from individual.services import GroupAndGroupIndividualAlignmentService
         service = GroupAndGroupIndividualAlignmentService(self.user_updated)
         service.update_json_ext_for_group(self.group)
+
+    @classmethod
+    def get_queryset(cls, queryset, user):
+        if queryset is None:
+            queryset = GroupIndividual.objects.all()
+
+        if not settings.ROW_SECURITY:
+            return queryset
+
+        if user.is_anonymous:
+            return queryset.filter(id=-1)
+
+        if not user.is_imis_admin:
+            return queryset.filter(
+                LocationManager().build_user_location_filter_query(
+                    user._u, prefix='group__location'
+                )
+            )
+        return queryset
