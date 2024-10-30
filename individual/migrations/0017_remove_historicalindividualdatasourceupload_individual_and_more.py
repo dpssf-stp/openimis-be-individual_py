@@ -26,52 +26,6 @@ class Migration(migrations.Migration):
             model_name="individualdatasourceupload",
             name="individual",
         ),
-        migrations.AddField(
-            model_name="group",
-            name="location",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.DO_NOTHING,
-                related_name="groups",
-                to="location.location",
-            ),
-        ),
-        migrations.AddField(
-            model_name="historicalgroup",
-            name="location",
-            field=models.ForeignKey(
-                blank=True,
-                db_constraint=False,
-                null=True,
-                on_delete=django.db.models.deletion.DO_NOTHING,
-                related_name="+",
-                to="location.location",
-            ),
-        ),
-        migrations.AddField(
-            model_name="historicalindividual",
-            name="location",
-            field=models.ForeignKey(
-                blank=True,
-                db_constraint=False,
-                null=True,
-                on_delete=django.db.models.deletion.DO_NOTHING,
-                related_name="+",
-                to="location.location",
-            ),
-        ),
-        migrations.AddField(
-            model_name="individual",
-            name="location",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.DO_NOTHING,
-                related_name="individuals",
-                to="location.location",
-            ),
-        ),
         migrations.AlterField(
             model_name="group",
             name="user_created",
@@ -110,24 +64,6 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.DO_NOTHING,
                 related_name="%(class)s_user_updated",
                 to=settings.AUTH_USER_MODEL,
-            ),
-        ),
-        migrations.AlterField(
-            model_name="groupindividual",
-            name="group",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.DO_NOTHING,
-                related_name="groupindividuals",
-                to="individual.group",
-            ),
-        ),
-        migrations.AlterField(
-            model_name="groupindividual",
-            name="individual",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.DO_NOTHING,
-                related_name="groupindividuals",
-                to="individual.individual",
             ),
         ),
         migrations.AlterField(
