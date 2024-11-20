@@ -216,7 +216,9 @@ class BaseGroupColumnAggregationClass(ItemsUploadTaskCompletionEvent):
     
     @staticmethod
     def _individual_role_parser(individual_role):
-        return getattr(GroupIndividual.Role, individual_role.upper(), None)
+        if individual_role:
+            return getattr(GroupIndividual.Role, individual_role.upper(), None)
+        return None
 
     def _create_group_data_source(self, json_ext_data):
         data_source = GroupDataSource(upload=self.upload_record.data_upload, json_ext=json_ext_data)
